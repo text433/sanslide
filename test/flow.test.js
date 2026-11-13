@@ -1,0 +1,64 @@
+// Pilna plūsma: ievade, pauze, finišs, rezultāti, atkārtojums, garāža. node test/flow.test.js [w] [h]
+const { chromium } = require('playwright');
+const path = require('path');
+const W = +(process.argv[2] || 360), Hh = +(process.argv[3] || 640);
+const out = path.join(__dirname, 'shots');
+const ok = (c, m) => { console.log((c ? 'PASS ' : 'FAIL ') + m); if (!c) process.exitCode = 1; };
+(async () => {
+  const b = await chromium.launch({ executablePath: '/usr/bin/google-chrome', args: ['--no-sandbox', '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--autoplay-policy=no-user-gesture-required'] });
+  const ctx = await b.newContext({ viewport: { width: W, height: Hh }, deviceScaleFactor: 1 });
+  const p = await ctx.newPage();
+  const errs = [];
+  p.on('console', m => { if (m.type() === 'error') errs.push(m.text()); });
+  p.on('pageerror', e => errs.push('pageerror: ' + e.message));
+  await p.goto('file://' + path.join(__dirname, '..', 'dist', 'test.html'));
+  await p.waitForFunction(() => window.__game && window.__game.state() === 'menu', null, { timeout: 30000 });
+  await p.waitForTimeout(600);
+  await p.screenshot({ path: `${out}/flow-${W}x${Hh}-menu.png` });
+  const G = f => p.evaluate(f);
+  await p.click('#btnPlay');
+  ok(await G(() => window.__game.state()) === 'countdown', 'BRAUKT → atskaite');
+  await p.waitForFunction(() => window.__game.state() === 'race', null, { timeout: 60000 });
+  // stūrēšana ar rādītāju
+  await p.mouse.move(W / 2, Hh * 0.7); await p.mouse.down(); await p.mouse.move(W / 2 + 70, Hh * 0.7, { steps: 4 });
+  await p.waitForTimeout(500);
+  ok(await G(() => window.__game.race().c.steer) > 0.5, 'velkot pa labi, stūre > 0.5');
+  ok(await G(() => document.getElementById('stick').classList.contains('on')), 'svira redzama');
+  await p.mouse.move(W / 2 - 90, Hh * 0.7, { steps: 6 }); await p.waitForTimeout(400);
+  ok(await G(() => window.__game.race().c.steer) < -0.5, 'velkot pa kreisi, stūre < -0.5');
+  await p.mouse.up(); await p.waitForTimeout(300);
+  ok(await G(() => window.__game.race().c.steer) === 0, 'atlaižot stūre = 0');
+  // tastatūra
+  await p.keyboard.down('ArrowRight'); await p.waitForTimeout(400);
+  ok(await G(() => window.__game.race().c.steer) > 0.5, 'bultiņa pa labi stūrē');
+  await p.keyboard.up('ArrowRight');
+  // pauze
+  await p.click('#btnPause');
+  ok(await G(() => window.__game.state()) === 'paused', 'pauze');
+  const t1 = await G(() => window.__game.race().t); await p.waitForTimeout(500);
+  ok(await G(() => window.__game.race().t) === t1, 'pauzē laiks stāv');
+  await p.screenshot({ path: `${out}/flow-${W}x${Hh}-pause.png` });
+  await p.click('#btnResume');
+  ok(await G(() => window.__game.state()) === 'race', 'turpināt');
+  await G(() => window.__game.auto(true));
+  await p.waitForFunction(() => window.__game.state() === 'results', null, { timeout: 280000 });
+  await p.waitForTimeout(900);
+  await p.screenshot({ path: `${out}/flow-${W}x${Hh}-results.png` });
+  const r = await G(() => ({ w: window.__game.race().winner, fin: window.__game.race().c.fin, save: window.__game.save, q: window.__game.q, title: document.getElementById('resTitle').textContent, sub: document.getElementById('resSub').textContent, time: document.getElementById('rTime').textContent }));
+  console.log(JSON.stringify(r));
+  ok(r.fin > 20 && r.save.coins > 0 && r.save.races === 1, 'finišs, monētas piešķirtas');
+  await p.click('#btnAgain');
+  ok(await G(() => window.__game.state()) === 'countdown', 'VĒLREIZ → atskaite');
+  await p.click('#btnPause'); await p.click('#btnQuit');
+  ok(await G(() => window.__game.state()) === 'menu', 'uz izvēlni');
+  await p.click('#trkNext'); await p.waitForTimeout(500);
+  ok(await G(() => document.getElementById('trkName').textContent) === 'Kanjona šoseja', 'trases maiņa');
+  await p.click('#btnGarage'); await p.click('#carNext'); await p.waitForTimeout(300);
+  ok(await G(() => document.getElementById('btnCar').disabled), 'dārga mašīna bloķēta');
+  await p.screenshot({ path: `${out}/flow-${W}x${Hh}-garage.png` });
+  await p.click('#btnBack');
+  ok(await G(() => window.__game.state()) === 'menu', 'atpakaļ no garāžas');
+  console.log(errs.length ? 'CONSOLE ERRORS:\n' + errs.join('\n') : 'console clean');
+  if (errs.length) process.exitCode = 1;
+  await b.close();
+})().catch(e => { console.error('TEST ERR', e.message); process.exit(1); });

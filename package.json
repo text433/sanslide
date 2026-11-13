@@ -1,0 +1,17 @@
+{
+  "name": "sanslide",
+  "version": "1.0.0",
+  "description": "Sānslīde — low-poly HTML5 drifta dueļu spēle (Three.js)",
+  "directories": {
+    "test": "test"
+  },
+  "scripts": {
+    "build": "node build.js",
+    "test": "node test/sim.test.js",
+    "test:browser": "NODE_PATH=/opt/npm-tools/node_modules node test/flow.test.js"
+  },
+  "private": true,
+  "devDependencies": {
+    "three": "^0.128.0"
+  }
+}

@@ -1,0 +1,6 @@
+node_modules/
+test/shots/
+test/*.log
+test/tracks.svg
+test/tracks.png
+dist/test.html
